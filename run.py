@@ -4,24 +4,25 @@ import argparse
 para = argparse.ArgumentParser()
 para.add_argument("--task", type=str, default="What is the capital of Jordan?")
 para.add_argument('--run_mode', type=int, default=0)
+para.add_argument('--model_name', type=str, default="meta-llama/Llama-3.2-1B-Instruct")
 args = para.parse_args()
 
-async def arun():
+async def arun(model_name):
     swarm = Swarm(
         ["IO"], 
         "gaia",
-        model_name="meta-llama/Llama-3.2-1B-Instruct"
+        model_name=model_name
     )
     task = "What is the capital of Jordan?"
     inputs = {"task": task}
     answer = await swarm.arun(inputs)
     print(answer)
 
-def run():
+def run(model_name):
     swarm = Swarm(
         ["IO"], 
         "gaia",
-        model_name="meta-llama/Llama-3.2-1B-Instruct"
+        model_name=model_name
     )
     task = "What is the capital of Jordan?"
     inputs = {"task": task}
@@ -29,6 +30,6 @@ def run():
     print(answer)
     
 if args.run_mode:
-    asyncio.run(arun())
+    asyncio.run(arun(args.model_name))
 else:
-    run()
+    run(args.model_name)

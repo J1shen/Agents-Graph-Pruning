@@ -22,7 +22,9 @@ class LLMRegistry:
 
         if model_name == 'mock':
             model = cls.registry.get(model_name)
-        else: # any version of GPTChat like "gpt-4-1106-preview"
+        elif model_name.startswith('gpt-'): 
+            # any version of GPTChat like "gpt-4-1106-preview"
             model = cls.registry.get('GPTChat', model_name)
-
+        else:
+            model = cls.registry.get('LocalLLM', model_name)
         return model

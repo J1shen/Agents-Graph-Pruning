@@ -3,7 +3,7 @@
 import asyncio
 import copy
 from dataclasses import asdict
-from typing import Any, List, Union, Optional
+from typing import Any, Dict, List, Union, Optional
 from dotenv import load_dotenv
 import async_timeout
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -35,7 +35,7 @@ class LocalLLM(LLM):
         self.tokenizer = _tokenizer
         self.model = _model
         logger.info(f"Local LLM {model_name} loaded on {self.device}")
-    
+
     def __deepcopy__(self, memo) -> "LocalLLM":
         # Overwrite deepcopy to avoid copying the model and tokenizer
         cls = self.__class__
@@ -100,12 +100,37 @@ class LocalLLM(LLM):
             num_comps,
             device=self.device)
 
+
+def _preprocess_messages(
+    tokenizer,
+    messages: List[Message],
+    max_tokens: int,
+    temperature: float,
+    num_comps: int,
+    device: str,
+) -> Dict[str, Any]:
+    chat = [asdict(message) for message in messages]
+    formatted_chat = tokenizer.apply_chat_template(
+        chat, tokenize=False, add_generation_prompt=True
+    )
+    inputs = tokenizer(formatted_chat, return_tensors="pt").to(device)
+
+    generation_params = {
+        "max_new_tokens": max_tokens,
+        "do_sample": True if temperature > 0 else False,
+        "temperature": temperature,
+        "num_return_sequences": num_comps,
+        "pad_token_id": tokenizer.eos_token_id,
+    }
+    return inputs | generation_params
+
+
 def llm_chat(
     model,
     tokenizer,
     messages: List[Message],
-    max_tokens: int = 300,
-    temperature: float = 0.7,
+    max_tokens: int = 8192,
+    temperature: float = 0.0,
     num_comps=1,
     return_cost=False,
     device='cpu',
@@ -113,27 +138,22 @@ def llm_chat(
     if messages[0].content == '$skip$':
         return '' 
 
-    formated_messages = [message.content for message in messages]
-    combined_text = "\n".join([f"{message['role']}: {message['content']}" for message in formated_messages])
-    
-    inputs = tokenizer(combined_text, return_tensors="pt").to(device)
-
-    generation_params = {
-        # "max_length": max_tokens,
-        "max_new_tokens": max_tokens,
-        "do_sample": True if temperature > 0 else False,
-        "temperature": temperature,
-        "num_return_sequences": num_comps,
-        "pad_token_id": tokenizer.eos_token_id,
-    }
+    inputs = _preprocess_messages(
+        tokenizer=tokenizer,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        num_comps=num_comps,
+        device=device,
+    )
 
     try:
-        outputs = model.generate(**inputs, **generation_params)
+        outputs = model.generate(**inputs)
         print(outputs)
     except Exception as e:
-        print(f'Error during generation: {e}')
+        logger.error(f'Error during generation: {e}')
         raise TimeoutError("LLM Timeout")
-    
+
     responses = [tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
 
     if num_comps == 1:
@@ -146,8 +166,8 @@ async def llm_achat(
     model,
     tokenizer,
     messages: List[Message],
-    max_tokens: int = 300,
-    temperature: float = 0.7,
+    max_tokens: int = 8192,
+    temperature: float = 0.0,
     num_comps=1,
     return_cost=False,
     device='cpu',
@@ -155,25 +175,20 @@ async def llm_achat(
     if messages[0].content == '$skip$':
         return '' 
 
-    formated_messages = [asdict(message) for message in messages]
-    combined_text = "\n".join([f"{message['role']}: {message['content']}" for message in formated_messages])
-
-    inputs = tokenizer(combined_text, return_tensors="pt").to(device)
-    
-    generation_params = {
-        # "max_length": max_tokens,
-        "max_new_tokens": max_tokens,
-        "do_sample": True if temperature > 0 else False,
-        "temperature": temperature,
-        "num_return_sequences": num_comps,
-        "pad_token_id": tokenizer.eos_token_id,
-    }
+    inputs = _preprocess_messages(
+        tokenizer=tokenizer,
+        messages=messages,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        num_comps=num_comps,
+        device=device,
+    )
 
     try:
         async with async_timeout.timeout(1000):
-            outputs = await generate_response_async(model, inputs, generation_params)
+            outputs = await generate_response_async(model, **inputs)
     except asyncio.TimeoutError:
-        print('Timeout')
+        logger.error('Timeout')
         raise TimeoutError("LLM Timeout")
     
     responses = [tokenizer.decode(output, skip_special_tokens=True) for output in outputs]
@@ -183,6 +198,6 @@ async def llm_achat(
     
     return responses
 
-async def generate_response_async(model, inputs, generation_params):
-    outputs = await asyncio.to_thread(model.generate, **inputs, **generation_params)
+async def generate_response_async(model, **kwargs):
+    outputs = await asyncio.to_thread(model.generate, **kwargs)
     return outputs

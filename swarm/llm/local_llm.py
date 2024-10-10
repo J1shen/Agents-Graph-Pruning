@@ -1,8 +1,9 @@
 # Editor: Junyi Shen
 
 import asyncio
+import copy
 from dataclasses import asdict
-from typing import List, Union, Optional
+from typing import Any, List, Union, Optional
 from dotenv import load_dotenv
 import async_timeout
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -15,17 +16,38 @@ from swarm.llm.llm import LLM
 from swarm.llm.llm_registry import LLMRegistry
 load_dotenv()
 
+# Global variables to store the model and tokenizer
+# Note: Using this as class members will not work.
+_tokenizer: Optional[Any] = None
+_model: Optional[Any] = None
+
 @LLMRegistry.register('LocalLLM')
 class LocalLLM(LLM):
     def __init__(self, model_name: str):
+        global _model, _tokenizer
+
         self.model_name = model_name
-        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            ).to(self.device)
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        if _tokenizer is None:
+            _tokenizer = AutoTokenizer.from_pretrained(model_name)
+        if _model is None:
+            _model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device)
+        self.tokenizer = _tokenizer
+        self.model = _model
         logger.info(f"Local LLM {model_name} loaded on {self.device}")
-        
+    
+    def __deepcopy__(self, memo) -> "LocalLLM":
+        # Overwrite deepcopy to avoid copying the model and tokenizer
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            if k == 'model' or k == 'tokenizer':
+                setattr(result, k, v)
+            else:
+                setattr(result, k, copy.deepcopy(v, memo))
+        return result
+
     def gen(
         self,
         messages: List[Message],
@@ -51,7 +73,7 @@ class LocalLLM(LLM):
             temperature,
             num_comps,
             device=self.device)
-        
+
     async def agen(
         self,
         messages: List[Message],
@@ -77,13 +99,13 @@ class LocalLLM(LLM):
             temperature,
             num_comps,
             device=self.device)
-        
+
 def llm_chat(
     model,
     tokenizer,
     messages: List[Message],
-    max_tokens: int = 8192,
-    temperature: float = 0.0,
+    max_tokens: int = 300,
+    temperature: float = 0.7,
     num_comps=1,
     return_cost=False,
     device='cpu',
@@ -97,10 +119,12 @@ def llm_chat(
     inputs = tokenizer(combined_text, return_tensors="pt").to(device)
 
     generation_params = {
-        "max_length": max_tokens,
+        # "max_length": max_tokens,
+        "max_new_tokens": max_tokens,
         "do_sample": True if temperature > 0 else False,
         "temperature": temperature,
         "num_return_sequences": num_comps,
+        "pad_token_id": tokenizer.eos_token_id,
     }
 
     try:
@@ -122,8 +146,8 @@ async def llm_achat(
     model,
     tokenizer,
     messages: List[Message],
-    max_tokens: int = 8192,
-    temperature: float = 0.0,
+    max_tokens: int = 300,
+    temperature: float = 0.7,
     num_comps=1,
     return_cost=False,
     device='cpu',
@@ -137,10 +161,12 @@ async def llm_achat(
     inputs = tokenizer(combined_text, return_tensors="pt").to(device)
     
     generation_params = {
-        "max_length": 20,
+        # "max_length": max_tokens,
+        "max_new_tokens": max_tokens,
         "do_sample": True if temperature > 0 else False,
         "temperature": temperature,
         "num_return_sequences": num_comps,
+        "pad_token_id": tokenizer.eos_token_id,
     }
 
     try:

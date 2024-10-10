@@ -46,12 +46,14 @@ class Graph(ABC):
                 domain: str,
                 model_name: Optional[str] = None,
                 meta_prompt: bool = False,
+                async_exec: bool = True,
                 ):
 
         self.id = shortuuid.ShortUUID().random(length=4)
         self.domain = domain
         self.model_name = model_name
         self.meta_prompt = meta_prompt
+        self.async_exec = async_exec
         self.nodes = {}
         self.memory = GlobalMemory.instance()
         self.is_aggregate = False
@@ -74,7 +76,7 @@ class Graph(ABC):
         for node in self.nodes.values():
             num_edges += len(node.successors)
         return num_edges
-    
+
     @property
     def num_nodes(self):
         return len(self.nodes)
@@ -112,16 +114,29 @@ class Graph(ABC):
                   max_tries: int = 3, 
                   max_time: int = 600, 
                   return_all_outputs: bool = False) -> List[Any]:
- 
+
         def is_node_useful(node):
             if node in self.output_nodes:
                 return True
-            
+
             for successor in node.successors:
                 if is_node_useful(successor):
                     return True
             return False
-        
+
+        async def exec_node(node: Node):
+            tries = 0
+            while tries < max_tries:
+                try:
+                    await asyncio.wait_for(node.execute(), timeout=max_time)
+                    break
+                except asyncio.TimeoutError:
+                    print(f"Node {node.id} execution timed out, retrying {tries + 1} out of {max_tries}...")
+                except Exception as e:
+                    print(f"Error during execution of node {node.id}: {e}")
+                    break
+                tries += 1
+
         useful_node_ids = [node_id for node_id, node in self.nodes.items() if is_node_useful(node)]
         in_degree = {node_id: len(self.nodes[node_id].predecessors) for node_id in useful_node_ids}
         zero_in_degree_queue = [node_id for node_id, deg in in_degree.items() if deg == 0 and node_id in useful_node_ids]
@@ -130,26 +145,45 @@ class Graph(ABC):
             node_input = deepcopy(inputs)
             input_node.inputs = [node_input]
 
-        while zero_in_degree_queue:
-            current_node_id = zero_in_degree_queue.pop(0)
-            current_node = self.nodes[current_node_id]
-            tries = 0
-            while tries < max_tries:
-                try:
-                    await asyncio.wait_for(self.nodes[current_node_id].execute(), timeout=max_time)
-                    break
-                except asyncio.TimeoutError:
-                    print(f"Node {current_node_id} execution timed out, retrying {tries + 1} out of {max_tries}...")
-                except Exception as e:
-                    print(f"Error during execution of node {current_node_id}: {e}")
-                    break
-                tries += 1
+        if self.async_exec:
+            pending_tasks = set()
+            while zero_in_degree_queue or pending_tasks:
+                pending_tasks.update(
+                    asyncio.create_task(exec_node(self.nodes[node_id]), name=node_id)
+                    for node_id in zero_in_degree_queue
+                )
+                zero_in_degree_queue = []
+                finished_tasks, pending_tasks = await asyncio.wait(
+                    pending_tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in finished_tasks:
+                    node_id = task.get_name()
+                    for successor in self.nodes[node_id].successors:
+                        if successor.id in useful_node_ids:
+                            in_degree[successor.id] -= 1
+                            if in_degree[successor.id] == 0:
+                                zero_in_degree_queue.append(successor.id)
+        else:
+            while zero_in_degree_queue:
+                current_node_id = zero_in_degree_queue.pop(0)
+                current_node = self.nodes[current_node_id]
+                tries = 0
+                while tries < max_tries:
+                    try:
+                        await asyncio.wait_for(self.nodes[current_node_id].execute(), timeout=max_time)
+                        break
+                    except asyncio.TimeoutError:
+                        print(f"Node {current_node_id} execution timed out, retrying {tries + 1} out of {max_tries}...")
+                    except Exception as e:
+                        print(f"Error during execution of node {current_node_id}: {e}")
+                        break
+                    tries += 1
 
-            for successor in current_node.successors:
-                if successor.id in useful_node_ids:
-                    in_degree[successor.id] -= 1
-                    if in_degree[successor.id] == 0:
-                        zero_in_degree_queue.append(successor.id)
+                for successor in current_node.successors:
+                    if successor.id in useful_node_ids:
+                        in_degree[successor.id] -= 1
+                        if in_degree[successor.id] == 0:
+                            zero_in_degree_queue.append(successor.id)
 
         final_answers = []
 

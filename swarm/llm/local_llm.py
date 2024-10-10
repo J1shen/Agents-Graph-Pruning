@@ -16,24 +16,21 @@ from swarm.llm.llm import LLM
 from swarm.llm.llm_registry import LLMRegistry
 load_dotenv()
 
-# Global variables to store the model and tokenizer
-# Note: Using this as class members will not work.
-_tokenizer: Optional[Any] = None
-_model: Optional[Any] = None
 
 @LLMRegistry.register('LocalLLM')
 class LocalLLM(LLM):
-    def __init__(self, model_name: str):
-        global _model, _tokenizer
+    model: Optional[Any] = None
+    tokenizer: Optional[Any] = None
 
+    def __init__(self, model_name: str):
         self.model_name = model_name
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        if _tokenizer is None:
-            _tokenizer = AutoTokenizer.from_pretrained(model_name)
-        if _model is None:
-            _model = AutoModelForCausalLM.from_pretrained(model_name).to(self.device)
-        self.tokenizer = _tokenizer
-        self.model = _model
+        if self.model is None:
+            self.__class__.model = AutoModelForCausalLM.from_pretrained(model_name).to(
+                self.device
+            )
+        if self.tokenizer is None:
+            self.__class__.tokenizer = AutoTokenizer.from_pretrained(model_name)
         logger.info(f"Local LLM {model_name} loaded on {self.device}")
 
     def __deepcopy__(self, memo) -> "LocalLLM":

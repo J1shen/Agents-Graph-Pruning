@@ -2,6 +2,7 @@ from typing import Optional
 from class_registry import ClassRegistry
 
 from swarm.llm.llm import LLM
+from swarm.llm import OPENAI_MODEL_PREFIX
 
 
 class LLMRegistry:
@@ -25,6 +26,8 @@ class LLMRegistry:
         elif model_name.startswith('gpt-'): 
             # any version of GPTChat like "gpt-4-1106-preview"
             model = cls.registry.get('GPTChat', model_name)
+        elif model_name.startswith(OPENAI_MODEL_PREFIX):
+            model = cls.registry.get('OpenAIChat', model_name[len(OPENAI_MODEL_PREFIX):])
         else:
             model = cls.registry.get('LocalLLM', model_name)
         return model

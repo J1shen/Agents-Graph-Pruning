@@ -16,7 +16,6 @@ async def arun(model_name):
     task = "What is the capital of Jordan?"
     inputs = {"task": task}
     answer = await swarm.arun(inputs)
-    print(answer)
 
 def run(model_name):
     swarm = Swarm(
@@ -27,7 +26,6 @@ def run(model_name):
     task = "What is the capital of Jordan?"
     inputs = {"task": task}
     answer = swarm.run(inputs)
-    print(answer)
     
 if args.run_mode:
     asyncio.run(arun(args.model_name))

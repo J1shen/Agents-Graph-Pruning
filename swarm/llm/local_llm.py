@@ -1,4 +1,4 @@
-# Editor: Junyi Shen
+# Creator: Junyi Shen
 
 import asyncio
 import copy

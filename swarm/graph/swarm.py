@@ -58,7 +58,6 @@ class Swarm:
         decision_method = OperationRegistry.get(self.final_node_class, self.domain, self.model_name, **self.final_node_kwargs)
         self.composite_graph = CompositeGraph(decision_method,
                                               self.domain, self.model_name)
-        potential_connections = []
 
         for agent_name in self.agent_names:
             if agent_name in AgentRegistry.registry:
@@ -66,8 +65,6 @@ class Swarm:
                                                    self.domain, self.model_name)
                 if not include_inner_agent_connections:
                     for node in agent_instance.nodes:
-                        for successor in agent_instance.nodes[node].successors:
-                            potential_connections.append((node, successor.id))
                         agent_instance.nodes[node].successors = []
                 self.composite_graph.add_graph(agent_instance)
                 self.used_agents.append(agent_instance)

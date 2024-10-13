@@ -21,7 +21,7 @@ def run(model_name):
     swarm = Swarm(
         ["IO"], 
         "gaia",
-        model_name=model_name
+        model_name=[model_name]*2
     )
     task = "What is the capital of Jordan?"
     inputs = {"task": task}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import asyncio
 import shortuuid
 import numpy as np
@@ -27,7 +27,7 @@ class Swarm:
     def __init__(self, 
                  agent_names: List[str],
                  domain: str, # No default, we want the user to be aware of what domain they select.
-                 model_name: Optional[str] = None, # None is mapped to "gpt-4-1106-preview".
+                 model_name: Optional[Union[str, List[str]]] = None, # None is mapped to "gpt-4-1106-preview".
                  open_graph_as_html: bool = False,
                  final_node_class: str = "FinalDecision",
                  final_node_kwargs: Dict[str, Any] = {'strategy': MergingStrategy.OutputsAsReferences},
@@ -55,14 +55,25 @@ class Swarm:
     def organize(self, include_inner_agent_connections: bool = True):
 
         self.used_agents = []
-        decision_method = OperationRegistry.get(self.final_node_class, self.domain, self.model_name, **self.final_node_kwargs)
-        self.composite_graph = CompositeGraph(decision_method,
-                                              self.domain, self.model_name)
+        decision_method = OperationRegistry.get(
+            self.final_node_class, 
+            self.domain, 
+            self.model_name if isinstance(self.model_name, str) else self.model_name[-1],
+            **self.final_node_kwargs
+            )
+        self.composite_graph = CompositeGraph(
+            decision_method,
+            self.domain, 
+            self.model_name if isinstance(self.model_name, str) else self.model_name[-1]
+            )
 
-        for agent_name in self.agent_names:
+        for i, agent_name in enumerate(self.agent_names):
             if agent_name in AgentRegistry.registry:
-                agent_instance = AgentRegistry.get(agent_name,
-                                                   self.domain, self.model_name)
+                agent_instance = AgentRegistry.get(
+                    agent_name,
+                    self.domain, 
+                    self.model_name if isinstance(self.model_name, str) else self.model_name[i]
+                    )
                 if not include_inner_agent_connections:
                     for node in agent_instance.nodes:
                         agent_instance.nodes[node].successors = []

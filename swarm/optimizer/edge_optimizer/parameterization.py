@@ -145,3 +145,33 @@ class EdgeWiseDistribution(ConnectDistribution):
                     out_node.add_successor(in_node)
                     in_node.add_predecessor(out_node)
         return _graph
+
+    def realize_adj(self,
+                graph: CompositeGraph,
+                temperature: float = 1.0, # must be >= 1.0
+                threshold: float = None,
+                adj_matrix: torch.Tensor = None,
+                ) -> Tuple[CompositeGraph, torch.Tensor]:
+        log_probs = [torch.tensor(0.0, requires_grad=True)]
+        _graph = deepcopy(graph)
+        for potential_connection in self.potential_connections:
+            out_node = _graph.find_node(potential_connection[0])
+            in_node = _graph.find_node(potential_connection[1])
+
+            if not out_node or not in_node:
+                continue
+            
+            addable_if_not_used_learned_order = not _graph.check_cycle(in_node, {out_node}, set())
+            if addable_if_not_used_learned_order:
+                edge_logit = adj_matrix[self.node_id2idx[out_node.id], self.node_id2idx[in_node.id]]
+                edge_prob = torch.sigmoid(edge_logit / temperature)
+                if threshold:
+                    edge_prob = torch.tensor(1 if edge_prob > threshold else 0)
+                if torch.rand(1) < edge_prob:
+                    out_node.add_successor(in_node)
+                    log_probs.append(torch.log(edge_prob))
+                else:
+                    log_probs.append(torch.log(1 - edge_prob))
+
+        log_prob = torch.sum(torch.stack(log_probs))
+        return _graph, log_prob

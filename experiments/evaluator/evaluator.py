@@ -16,7 +16,7 @@ from swarm.environment.agents import IO
 from swarm.graph.swarm import Swarm
 from experiments.evaluator.datasets.base_dataset import BaseDataset
 from experiments.evaluator.accuracy import Accuracy
-
+import re
 
 class Evaluator():
     def __init__(
@@ -161,7 +161,8 @@ class Evaluator():
 
             for raw_answer, record in zip(raw_answers, record_batch):
                 print("Raw answer:", raw_answer)
-                answer = dataset.postprocess_answer(raw_answer)
+                #answer = dataset.postprocess_answer(raw_answer)
+                answer = self.postprocess_answer(raw_answer[0])
                 print("Postprocessed answer:", answer)
                 correct_answer = dataset.record_to_target_answer(record)
                 print("Correct answer:", correct_answer)
@@ -189,10 +190,11 @@ class Evaluator():
         for i_conn, (conn, prob) in enumerate(zip(
                 self._swarm.connection_dist.potential_connections, edge_probs)):
             src_id, dst_id = conn
+            prob = prob.item() if isinstance(prob, torch.Tensor) else prob
             src_node = self._swarm.composite_graph.find_node(src_id)
             dst_node = self._swarm.composite_graph.find_node(dst_id)
             msg = (f"{i_conn}: src={src_node.node_name}({src_node.id}), "
-                    f"dst={dst_node.node_name}({dst_node.id}), prob={prob.item():.3f}")
+                    f"dst={dst_node.node_name}({dst_node.id}), prob={prob:.3f}")
             msgs.append(msg+"\n")
             print(msg)
         if save_to_file:
@@ -317,7 +319,7 @@ class Evaluator():
         from swarm.optimizer.edge_optimizer.graph_learner.learner import GraphLearner
         from swarm.optimizer.edge_optimizer.graph_learner.optimization import get_node_feature
         learner = GraphLearner(
-                input_size=10,
+                input_size=11,
                 hidden_size=16,
                 graph_type='prob',
                 metric_type='attention',
@@ -349,7 +351,7 @@ class Evaluator():
                     yield record
 
         loader = infinite_data_loader()
-
+        
         edge_probs = None
         for i_iter in range(num_iters):
             print(f"Iter {i_iter}", 80*'-')
@@ -360,11 +362,10 @@ class Evaluator():
             log_probs = []
             correct_answers = []
             for i_record, record in zip(range(batch_size), loader):
-                
-                node_features = torch.stack([get_node_feature(node) for node in self._swarm.composite_graph.nodes]).to('cuda')
+                nodes = self._swarm.composite_graph.nodes
+                node_features = torch.stack([get_node_feature(node) for node in self._swarm.composite_graph.nodes.values()]).to('cuda')
                 masked_features, learned_adj = learner(node_features)
-            
-                realized_graph, log_prob = self._swarm.connection_dist.realize_adj(
+                realized_graph, log_prob, edge_logits = self._swarm.connection_dist.realize_adj(
                     self._swarm.composite_graph,
                     adj_matrix=learned_adj
                     )
@@ -379,15 +380,15 @@ class Evaluator():
             raw_answers = await asyncio.gather(*future_answers)
 
             print(f"Batch time {time.time() - start_ts:.3f}")
-
             loss_list: List[torch.Tensor] = []
             utilities: List[float] = []
             for raw_answer, log_prob, correct_answer in zip(raw_answers, log_probs, correct_answers):
-                answer = dataset.postprocess_answer(raw_answer)
+                answer = self.postprocess_answer(raw_answer[0])
                 assert isinstance(correct_answer, str), \
                     f"String expected but got {correct_answer} of type {type(correct_answer)} (1)"
                 accuracy = Accuracy()
                 accuracy.update(answer, correct_answer)
+                print("answer:", answer, "correct_answer:", correct_answer)
                 utility = accuracy.get()
                 utilities.append(utility)
                 single_loss = - log_prob * utility
@@ -395,16 +396,17 @@ class Evaluator():
 
             print("utilities:", utilities)
             mean_utility = np.mean(np.array(utilities))
-            total_loss = torch.mean(torch.stack(loss_list))
+            total_loss = torch.mean(torch.stack(loss_list)).to('cuda')
 
             print("loss:", total_loss.item())
             optimizer.zero_grad()
             total_loss.backward()
-            print("Grad:", self._swarm.connection_dist.edge_logits.grad)
+            #print("Grad:", learner.linear_sims[0].weight.grad)
             optimizer.step()
+            print("matrix:", learned_adj)
 
-            print("edge_logits:", self._swarm.connection_dist.edge_logits)
-            edge_probs = torch.sigmoid(self._swarm.connection_dist.edge_logits)
+            #edge_probs = torch.sigmoid(torch.tensor(edge_logits))
+            edge_probs = edge_logits
             print("edge_probs:", edge_probs)
 
             self._print_conns(edge_probs)
@@ -423,5 +425,11 @@ class Evaluator():
             self._print_conns(edge_probs, save_to_file=True)
 
         print("Done!")
-        edge_probs = torch.sigmoid(self._swarm.connection_dist.edge_logits)
-        return edge_probs
+        return torch.tensor(edge_probs)
+    
+    def postprocess_answer(self, raw_answer):
+        match = re.search(r'The correct answer is ([A-D])', raw_answer)
+        if match:
+            return match.group(1)
+        else:
+            return 'N'

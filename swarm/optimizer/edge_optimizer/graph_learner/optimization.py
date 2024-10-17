@@ -5,21 +5,11 @@ import asyncio
 import pickle
 import numpy as np
 from .learner import GraphLearner
-from swarm.environment.operations import (
-    CombineAnswer,
-    GenerateQuery,
-    DirectAnswer,
-    FileAnalyse,
-    WebSearch,
-    Reflect,
-    FinalDecision,
-    ReturnAll,
-    UnitestGeneration,
-    CodeWriting,
-)
+from swarm.environment.operations import *
+from swarm.environment.operations.adversarial_answer import AdversarialAnswer
 def get_node_feature(node):
     #return one-hot encoding of the node type
-    node_type = node.__class__.__name__
+    node_type = node.__class__
     node_types = [
         CombineAnswer,
         GenerateQuery,
@@ -31,6 +21,7 @@ def get_node_feature(node):
         ReturnAll,
         UnitestGeneration,
         CodeWriting,
+        AdversarialAnswer
     ]
     return torch.tensor([node_type == type for type in node_types], dtype=torch.float32)
     

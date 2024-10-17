@@ -154,17 +154,20 @@ class EdgeWiseDistribution(ConnectDistribution):
                 ) -> Tuple[CompositeGraph, torch.Tensor]:
         log_probs = [torch.tensor(0.0, requires_grad=True).cuda()]
         _graph = deepcopy(graph)
+        edge_logits = []
         for potential_connection in self.potential_connections:
             out_node = _graph.find_node(potential_connection[0])
             in_node = _graph.find_node(potential_connection[1])
-
+            edge_logit = adj_matrix[self.node_id2idx[out_node.id], self.node_id2idx[in_node.id]]
+            edge_logits.append(edge_logit.item())
+            
             if not out_node or not in_node:
                 continue
             
-            addable_if_not_used_learned_order = not _graph.check_cycle(in_node, {out_node}, set())
-            if addable_if_not_used_learned_order:
-                edge_logit = adj_matrix[self.node_id2idx[out_node.id], self.node_id2idx[in_node.id]]
-                edge_prob = torch.sigmoid(edge_logit / temperature)
+            addable = not _graph.check_cycle(in_node, {out_node}, set())
+            if addable:
+                #edge_prob = torch.sigmoid(edge_logit / temperature)
+                edge_prob = edge_logit
                 if threshold:
                     edge_prob = torch.tensor(1 if edge_prob > threshold else 0)
                 if torch.rand(1).cuda() < edge_prob:
@@ -174,4 +177,4 @@ class EdgeWiseDistribution(ConnectDistribution):
                     log_probs.append(torch.log(1 - edge_prob))
 
         log_prob = torch.sum(torch.stack(log_probs))
-        return _graph, log_prob
+        return _graph, log_prob, edge_logits

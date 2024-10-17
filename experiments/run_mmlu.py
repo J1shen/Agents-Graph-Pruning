@@ -108,8 +108,8 @@ async def main():
 
         lr = 0.1
 
-        edge_probs = await evaluator.optimize_swarm(num_iters=num_iters, lr=lr)
-        #edge_probs = await evaluator.optimize_swarm_learner(num_iters=num_iters, lr=lr)
+        #edge_probs = await evaluator.optimize_swarm(num_iters=num_iters, lr=lr)
+        edge_probs = await evaluator.optimize_swarm_learner(num_iters=num_iters, lr=lr)
         
         score = await evaluator.evaluate_swarm(
             mode='external_edge_probs',

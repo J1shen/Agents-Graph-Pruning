@@ -306,3 +306,122 @@ class Evaluator():
         print("Done!")
         edge_probs = torch.sigmoid(self._swarm.connection_dist.edge_logits)
         return edge_probs
+
+    async def optimize_swarm_learner(
+            self,
+            num_iters: int,
+            lr: float,
+            batch_size: int = 4,
+            ) -> torch.Tensor:
+        
+        from swarm.optimizer.edge_optimizer.graph_learner.learner import GraphLearner
+        from swarm.optimizer.edge_optimizer.graph_learner.optimization import get_node_feature
+        learner = GraphLearner(
+                input_size=10,
+                hidden_size=16,
+                graph_type='prob',
+                metric_type='attention',
+                device='cuda',
+            ).to('cuda')
+        
+        assert self._swarm is not None
+
+        dataset = self._train_dataset
+
+        print(f"Optimizing swarm on {dataset.__class__.__name__} split {dataset.split}")
+
+        optimizer = torch.optim.Adam(learner.parameters(), lr=lr)
+
+        if self._art_dir_name is not None:
+            hp_json_name = os.path.join(self._art_dir_name, "hp.json")
+            with open(hp_json_name, "w") as f:
+                json.dump(dict(lr=lr,
+                               batch_size=batch_size,
+                               num_iters=num_iters,
+                               model_name=self._model_name
+                               ), f)
+
+        def infinite_data_loader() -> Iterator[pd.DataFrame]:
+            perm = np.random.permutation(len(dataset))
+            while True:
+                for idx in perm:
+                    record = dataset[idx.item()]
+                    yield record
+
+        loader = infinite_data_loader()
+
+        edge_probs = None
+        for i_iter in range(num_iters):
+            print(f"Iter {i_iter}", 80*'-')
+
+            start_ts = time.time()
+
+            future_answers = []
+            log_probs = []
+            correct_answers = []
+            for i_record, record in zip(range(batch_size), loader):
+                
+                node_features = torch.stack([get_node_feature(node) for node in self._swarm.composite_graph.nodes]).to('cuda')
+                masked_features, learned_adj = learner(node_features)
+            
+                realized_graph, log_prob = self._swarm.connection_dist.realize_adj(
+                    self._swarm.composite_graph,
+                    adj_matrix=learned_adj
+                    )
+
+                input_dict = dataset.record_to_swarm_input(record)
+                answer = self._swarm.arun(input_dict, realized_graph)
+                future_answers.append(answer)
+                log_probs.append(log_prob)
+                correct_answer = dataset.record_to_target_answer(record)
+                correct_answers.append(correct_answer)
+
+            raw_answers = await asyncio.gather(*future_answers)
+
+            print(f"Batch time {time.time() - start_ts:.3f}")
+
+            loss_list: List[torch.Tensor] = []
+            utilities: List[float] = []
+            for raw_answer, log_prob, correct_answer in zip(raw_answers, log_probs, correct_answers):
+                answer = dataset.postprocess_answer(raw_answer)
+                assert isinstance(correct_answer, str), \
+                    f"String expected but got {correct_answer} of type {type(correct_answer)} (1)"
+                accuracy = Accuracy()
+                accuracy.update(answer, correct_answer)
+                utility = accuracy.get()
+                utilities.append(utility)
+                single_loss = - log_prob * utility
+                loss_list.append(single_loss)
+
+            print("utilities:", utilities)
+            mean_utility = np.mean(np.array(utilities))
+            total_loss = torch.mean(torch.stack(loss_list))
+
+            print("loss:", total_loss.item())
+            optimizer.zero_grad()
+            total_loss.backward()
+            print("Grad:", self._swarm.connection_dist.edge_logits.grad)
+            optimizer.step()
+
+            print("edge_logits:", self._swarm.connection_dist.edge_logits)
+            edge_probs = torch.sigmoid(self._swarm.connection_dist.edge_logits)
+            print("edge_probs:", edge_probs)
+
+            self._print_conns(edge_probs)
+
+            if self._logger is not None:
+                self._logger.add_scalar("train/loss", total_loss.item(), i_iter)
+                self._logger.add_scalar("train/utility", mean_utility.item(), i_iter)
+            if self._art_dir_name is not None:
+                log_jsonl_name = os.path.join(self._art_dir_name, "training.jsonl")
+                with open(log_jsonl_name, "a") as f:
+                    json.dump(dict(iter=i_iter, train_loss=total_loss.item(), train_utility=mean_utility.item()), f)
+                    f.write("\n")
+            print("end of iteration")
+
+        if edge_probs is not None:
+            self._print_conns(edge_probs, save_to_file=True)
+
+        print("Done!")
+        edge_probs = torch.sigmoid(self._swarm.connection_dist.edge_logits)
+        return edge_probs

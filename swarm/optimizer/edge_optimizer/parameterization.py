@@ -152,7 +152,7 @@ class EdgeWiseDistribution(ConnectDistribution):
                 threshold: float = None,
                 adj_matrix: torch.Tensor = None,
                 ) -> Tuple[CompositeGraph, torch.Tensor]:
-        log_probs = [torch.tensor(0.0, requires_grad=True)]
+        log_probs = [torch.tensor(0.0, requires_grad=True).cuda()]
         _graph = deepcopy(graph)
         for potential_connection in self.potential_connections:
             out_node = _graph.find_node(potential_connection[0])
@@ -167,7 +167,7 @@ class EdgeWiseDistribution(ConnectDistribution):
                 edge_prob = torch.sigmoid(edge_logit / temperature)
                 if threshold:
                     edge_prob = torch.tensor(1 if edge_prob > threshold else 0)
-                if torch.rand(1) < edge_prob:
+                if torch.rand(1).cuda() < edge_prob:
                     out_node.add_successor(in_node)
                     log_probs.append(torch.log(edge_prob))
                 else:

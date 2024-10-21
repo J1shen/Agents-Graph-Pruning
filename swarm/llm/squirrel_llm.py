@@ -64,7 +64,7 @@ class SquirrelLLM(LLM):
     async def agen(self, *args, **kwargs) -> Union[List[str], str]:
         try:
             kwargs.pop("max_tokens", None)
-            response = chat("TEST_LLM", *args, **kwargs, max_tokens=self.max_tokens)
+            response = chat("GPT4o-xia", *args, **kwargs, max_tokens=self.max_tokens)
             return response
         except Exception as error:
             logger.error(f"Error in agen: {error}")
@@ -73,7 +73,7 @@ class SquirrelLLM(LLM):
     def gen(self, *args, **kwargs) -> Union[List[str], str]:
         try:
             kwargs.pop("max_tokens", None)
-            response = chat("TEST_LLM", *args, **kwargs, max_tokens=self.max_tokens)
+            response = chat("GPT4o-xia", *args, **kwargs, max_tokens=self.max_tokens)
             return response
         except Exception as error:
             logger.error(f"Error in gen: {error}")

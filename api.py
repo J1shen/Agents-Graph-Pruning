@@ -50,7 +50,7 @@ if __name__ == "__main__":
         {"role": "user", "content": "Question:A train travels at a constant speed of 60 kilometers per hour. If the distance between two stations is 180 kilometers, how long will it take for the train to travel between the two stations? A. 2 hour B. 2.5 hour C. 3 hours D. 3.5 hours What is the correct answer?"},
     ]
 
-    response, _ = chat("GPT4o-xia", messages, debug=True)
+    response, _ = chat("Test_LLM", messages, debug=True)
     print(response)
 
     # 将助手的回复添加到消息列表中，继续维护历史会话

@@ -27,6 +27,9 @@ class LLMRegistry:
         elif model_name == 'squirrel':
             model = cls.registry.get(model_name)
 
+        elif model_name == 'qian':
+            model = cls.registry.get(model_name)
+
         elif model_name.startswith('gpt-'): 
             # any version of GPTChat like "gpt-4-1106-preview"
             model = cls.registry.get('GPTChat', model_name)

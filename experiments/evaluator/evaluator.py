@@ -162,7 +162,7 @@ class Evaluator():
             for raw_answer, record in zip(raw_answers, record_batch):
                 print("Raw answer:", raw_answer)
                 #answer = dataset.postprocess_answer(raw_answer)
-                answer = self.postprocess_answer(raw_answer[0])
+                answer = self.postprocess_answer(raw_answer[0], self._swarm.model_name)
                 print("Postprocessed answer:", answer)
                 correct_answer = dataset.record_to_target_answer(record)
                 print("Correct answer:", correct_answer)
@@ -321,7 +321,7 @@ class Evaluator():
         learner = GraphLearner(
                 input_size=11,
                 hidden_size=16,
-                graph_type='prob',
+                graph_type='bold',
                 metric_type='attention',
                 device='cuda',
             ).to('cuda')
@@ -361,6 +361,8 @@ class Evaluator():
             future_answers = []
             log_probs = []
             correct_answers = []
+            edge_probs = []
+            
             for i_record, record in zip(range(batch_size), loader):
                 nodes = self._swarm.composite_graph.nodes
                 node_features = torch.stack([get_node_feature(node) for node in self._swarm.composite_graph.nodes.values()]).to('cuda')
@@ -374,6 +376,7 @@ class Evaluator():
                 answer = self._swarm.arun(input_dict, realized_graph)
                 future_answers.append(answer)
                 log_probs.append(log_prob)
+                edge_probs.append(np.sum(edge_logits))
                 correct_answer = dataset.record_to_target_answer(record)
                 correct_answers.append(correct_answer)
 
@@ -382,8 +385,8 @@ class Evaluator():
             print(f"Batch time {time.time() - start_ts:.3f}")
             loss_list: List[torch.Tensor] = []
             utilities: List[float] = []
-            for raw_answer, log_prob, correct_answer in zip(raw_answers, log_probs, correct_answers):
-                answer = self.postprocess_answer(raw_answer[0])
+            for raw_answer, log_prob, correct_answer, edge_prob in zip(raw_answers, log_probs, correct_answers, edge_probs):
+                answer = self.postprocess_answer(raw_answer[0], self._swarm.model_name)
                 assert isinstance(correct_answer, str), \
                     f"String expected but got {correct_answer} of type {type(correct_answer)} (1)"
                 accuracy = Accuracy()
@@ -391,7 +394,10 @@ class Evaluator():
                 print("answer:", answer, "correct_answer:", correct_answer)
                 utility = accuracy.get()
                 utilities.append(utility)
-                single_loss = - log_prob * utility
+                util_loss = - log_prob * utility
+                l1_loss = - edge_prob
+                alpha = 0.1
+                single_loss = util_loss + alpha * l1_loss
                 loss_list.append(single_loss)
 
             print("utilities:", utilities)
@@ -427,9 +433,21 @@ class Evaluator():
         print("Done!")
         return torch.tensor(edge_probs)
     
-    def postprocess_answer(self, raw_answer):
-        match = re.search(r'The correct answer is ([A-D])', raw_answer)
-        if match:
-            return match.group(1)
+    def postprocess_answer(self, raw_answer, model_name = None):
+        if "llama" in model_name:
+            match = re.search(r'The correct answer is ([A-D])', raw_answer)
+            if match:
+                return match.group(1)
+            else:
+                return raw_answer[-1] if raw_answer[-1] in ['A', 'B', 'C', 'D'] else 'N'
         else:
-            return 'N'
+            if isinstance(answer, list):
+                if len(answer) > 0:
+                    answer = answer[0]
+                else:
+                    answer = ""
+            if not isinstance(answer, str):
+                raise Exception("Expected string")
+            if len(answer) > 0:
+                answer = answer[0] # Try to format the answer by taking the first letter
+            return answer

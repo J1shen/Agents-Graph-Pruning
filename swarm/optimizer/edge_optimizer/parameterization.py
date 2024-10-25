@@ -148,7 +148,6 @@ class EdgeWiseDistribution(ConnectDistribution):
 
     def realize_adj(self,
                 graph: CompositeGraph,
-                temperature: float = 1.0, # must be >= 1.0
                 threshold: float = None,
                 adj_matrix: torch.Tensor = None,
                 ) -> Tuple[CompositeGraph, torch.Tensor]:
@@ -166,7 +165,6 @@ class EdgeWiseDistribution(ConnectDistribution):
             
             addable = not _graph.check_cycle(in_node, {out_node}, set())
             if addable:
-                #edge_prob = torch.sigmoid(edge_logit / temperature)
                 edge_prob = edge_logit
                 if threshold:
                     edge_prob = torch.tensor(1 if edge_prob > threshold else 0)

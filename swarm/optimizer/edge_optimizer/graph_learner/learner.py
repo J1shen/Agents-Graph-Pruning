@@ -175,7 +175,9 @@ class GraphLearner(nn.Module):
             attention = attention.masked_fill_(1 - ctx_mask.byte().unsqueeze(1), markoff_value)
             attention = attention.masked_fill_(1 - ctx_mask.byte().unsqueeze(-1), markoff_value)
 
-        if self.graph_type == 'epsilonNN':
+        if self.graph_type == 'bold':
+            attention = torch.sigmoid(attention)
+        elif self.graph_type == 'epsilonNN':
             assert self.epsilon is not None
             attention = self.build_epsilon_neighbourhood(attention, self.epsilon, markoff_value)
         elif self.graph_type == 'KNN':
@@ -185,6 +187,7 @@ class GraphLearner(nn.Module):
             attention = self.build_prob_neighbourhood(attention, temperature=0.05)
         else:
             raise ValueError('Unknown graph_type: {}'.format(self.graph_type))
+        
         if self.graph_type in ['KNN', 'epsilonNN']:
             if self.metric_type in ('kernel', 'weighted_cosine'):
                 assert attention.min().item() >= 0

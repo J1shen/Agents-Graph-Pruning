@@ -15,6 +15,9 @@ class Singleton:
     
     def reset(self):
         self.value = 0.0
+    
+    def __deepcopy__(self, memo):
+        return self._instance
 
 class Cost(Singleton):
     def __init__(self):

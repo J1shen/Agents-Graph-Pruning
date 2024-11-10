@@ -2,7 +2,7 @@ from typing import Optional
 from class_registry import ClassRegistry
 
 from swarm.llm.llm import LLM
-from swarm.llm import OPENAI_MODEL_PREFIX
+from swarm.llm import BENCHMARK_MODEL_PREFIX, OPENAI_MODEL_PREFIX
 
 
 class LLMRegistry:
@@ -11,7 +11,7 @@ class LLMRegistry:
     @classmethod
     def register(cls, *args, **kwargs):
         return cls.registry.register(*args, **kwargs)
-    
+
     @classmethod
     def keys(cls):
         return cls.registry.keys()
@@ -35,6 +35,10 @@ class LLMRegistry:
             model = cls.registry.get('GPTChat', model_name)
         elif model_name.startswith(OPENAI_MODEL_PREFIX):
             model = cls.registry.get('OpenAIChat', model_name[len(OPENAI_MODEL_PREFIX):])
+        elif model_name.startswith(BENCHMARK_MODEL_PREFIX):
+            model = cls.registry.get(
+                "BenchmarkLLM", model_name[len(BENCHMARK_MODEL_PREFIX) :]
+            )
         else:
             model = cls.registry.get('LocalLLM', model_name)
         return model

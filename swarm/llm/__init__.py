@@ -1,6 +1,7 @@
 from swarm.llm.format import Message, Status
 
 OPENAI_MODEL_PREFIX = "[openai]"  # defined here to prevent circular import
+BENCHMARK_MODEL_PREFIX = "[benchmark]"  # defined here to prevent circular import
 
 from swarm.llm.llm import LLM
 from swarm.llm.mock_llm import MockLLM # must be imported before LLMRegistry

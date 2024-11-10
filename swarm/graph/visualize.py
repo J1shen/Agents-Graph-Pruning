@@ -33,7 +33,7 @@ def GPTSwarmVis(graph, style="pyvis", dry_run: bool = False, file_name=None):
                     if node_id in g.nodes:
                         graph_id = g.id
                         break
-                    color_key = graph_id
+                color_key = graph_id
             else:
                 color_key = node_id
             net.add_node(node_id, label=f"{type(node).__name__}\n(ID: {node_id})", color=color_map[color_key])

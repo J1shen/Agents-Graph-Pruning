@@ -5,6 +5,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 from pyvis.network import Network
 import seaborn as sns
+import platform
 
 def GPTSwarmVis(graph, style="pyvis", dry_run: bool = False, file_name=None):
     G = nx.DiGraph()
@@ -48,7 +49,10 @@ def GPTSwarmVis(graph, style="pyvis", dry_run: bool = False, file_name=None):
             result_path = GPTSWARM_ROOT / "result"
             os.makedirs(result_path, exist_ok=True)
             net.show(f"{result_path}/{file_name if file_name else 'example.html'}")
-            os.system(f"open {GPTSWARM_ROOT}/result/{file_name if file_name else 'example.html'}")
+            if platform.system() == "Linux":
+                os.system(f"open {GPTSWARM_ROOT}/result/{file_name if file_name else 'example.html'}")
+            elif platform.system() == "Windows":
+                os.system(f"start {GPTSWARM_ROOT}\\result\\{file_name if file_name else 'example.html'}")
 
     else:
         pos = nx.spring_layout(G, k=.3, iterations=30)

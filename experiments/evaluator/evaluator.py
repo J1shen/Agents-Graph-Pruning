@@ -161,8 +161,8 @@ class Evaluator():
 
             for raw_answer, record in zip(raw_answers, record_batch):
                 print("Raw answer:", raw_answer)
-                #answer = dataset.postprocess_answer(raw_answer)
-                answer = self.postprocess_answer(raw_answer[0], self._swarm.model_name)
+                # answer = dataset.postprocess_answer(raw_answer)
+                answer = self.postprocess_answer(raw_answer[0])
                 print("Postprocessed answer:", answer)
                 correct_answer = dataset.record_to_target_answer(record)
                 print("Correct answer:", correct_answer)
@@ -266,7 +266,8 @@ class Evaluator():
             loss_list: List[torch.Tensor] = []
             utilities: List[float] = []
             for raw_answer, log_prob, correct_answer in zip(raw_answers, log_probs, correct_answers):
-                answer = dataset.postprocess_answer(raw_answer)
+                # answer = dataset.postprocess_answer(raw_answer)
+                answer = self.postprocess_answer(raw_answer[0])
                 assert isinstance(correct_answer, str), \
                     f"String expected but got {correct_answer} of type {type(correct_answer)} (1)"
                 accuracy = Accuracy()
@@ -386,7 +387,8 @@ class Evaluator():
             loss_list: List[torch.Tensor] = []
             utilities: List[float] = []
             for raw_answer, log_prob, correct_answer, edge_prob in zip(raw_answers, log_probs, correct_answers, edge_probs):
-                answer = self.postprocess_answer(raw_answer[0], self._swarm.model_name)
+                # answer = dataset.postprocess_answer(raw_answer)
+                answer = self.postprocess_answer(raw_answer[0])
                 assert isinstance(correct_answer, str), \
                     f"String expected but got {correct_answer} of type {type(correct_answer)} (1)"
                 accuracy = Accuracy()
@@ -433,21 +435,22 @@ class Evaluator():
         print("Done!")
         return torch.tensor(edge_probs)
     
-    def postprocess_answer(self, raw_answer, model_name = None):
-        if "llama" in model_name:
-            match = re.search(r'The correct answer is ([A-D])', raw_answer)
+    def postprocess_answer(self, raw_answer):
+        match = re.search(r'correct (?:answer|option) is ([A-D])', raw_answer)
+        if match:
+            return match.group(1)
+        else:
+            # match = re.search(r'correct option is ([A-D])', raw_answer)
+            # if match:
+            #     return match.group(1)
+            match = re.search(r'correct (?:answer|option) is option ([A-D])', raw_answer)
             if match:
                 return match.group(1)
-            else:
-                return raw_answer[-1] if raw_answer[-1] in ['A', 'B', 'C', 'D'] else 'N'
-        else:
-            if isinstance(answer, list):
-                if len(answer) > 0:
-                    answer = answer[0]
-                else:
-                    answer = ""
-            if not isinstance(answer, str):
-                raise Exception("Expected string")
-            if len(answer) > 0:
-                answer = answer[0] # Try to format the answer by taking the first letter
-            return answer
+            match = re.search(r'correct (?:answer|option) is \(([A-D])\)', raw_answer)
+            if match:
+                return match.group(1)
+            match = re.search(r'correct (?:answer|option) is \[([A-D])\]', raw_answer)
+            if match:
+                return match.group(1)
+            return raw_answer[-1] if raw_answer[-1] in ['A', 'B', 'C', 'D'] else 'N'
+

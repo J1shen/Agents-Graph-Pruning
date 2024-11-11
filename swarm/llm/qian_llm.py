@@ -47,10 +47,11 @@ class QianLLM(LLM):
             system_message = {
                 "role": "system",
                 "content": ("You are currently an AI large language model, and we are conducting a test on your language "
-                            "and mathematical abilities. If the questions we ask are multiple-choice, please try to answer "
-                            "with the corresponding option. For example, if option A: 3 is the correct one, you should "
-                            "simply answer with 'A'. If there are no options, ensure that your answers are logically "
-                            "rigorous and respond in a structured manner. Always choose one of the given options.")
+                            "and mathematical abilities. For each multiple-choice question, please analyze the question "
+                            "thoroughly before arriving at an answer.please provide your answer. Then, provide your answer "
+                            "in the format: 'The correct answer is A/B/C/D.' For example, if the answer is option A, "
+                            "respond with 'The correct answer is A.' You can only choose one option. "
+                            "Answer all questions in this format only.")
             }
             user_message = {"role": "user", "content": message}
             messages = [system_message, user_message]
